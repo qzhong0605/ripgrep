@@ -1,4 +1,3 @@
-extern crate atty;
 #[macro_use]
 extern crate clap;
 extern crate globset;
@@ -10,14 +9,11 @@ extern crate lazy_static;
 extern crate log;
 extern crate num_cpus;
 extern crate regex;
-extern crate same_file;
 #[macro_use]
 extern crate serde_json;
 extern crate termcolor;
-#[cfg(windows)]
-extern crate winapi_util;
 
-use std::io;
+use std::io::{self, Write};
 use std::process;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;

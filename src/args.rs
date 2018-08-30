@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use atty;
 use clap;
+use grep::cli;
 use grep::matcher::LineTerminator;
 #[cfg(feature = "pcre2")]
 use grep::pcre2::{
@@ -35,10 +35,9 @@ use log;
 use num_cpus;
 use path_printer::{PathPrinter, PathPrinterBuilder};
 use regex::{self, Regex};
-use same_file::Handle;
 use termcolor::{
     WriteColor,
-    BufferedStandardStream, BufferWriter, ColorChoice, StandardStream,
+    BufferWriter, ColorChoice,
 };
 
 use app;
@@ -314,13 +313,8 @@ impl Args {
 
     /// Execute the given function with a writer to stdout that enables color
     /// support based on the command line configuration.
-    pub fn stdout(&self) -> Box<WriteColor + Send> {
-        let color_choice = self.matches().color_choice();
-        if atty::is(atty::Stream::Stdout) {
-            Box::new(StandardStream::stdout(color_choice))
-        } else {
-            Box::new(BufferedStandardStream::stdout(color_choice))
-        }
+    pub fn stdout(&self) -> cli::StandardStream {
+        cli::stdout(self.matches().color_choice())
     }
 
     /// Return the type definitions compiled into ripgrep.
@@ -853,7 +847,7 @@ impl ArgMatches {
         } else if preference == "ansi" {
             ColorChoice::AlwaysAnsi
         } else if preference == "auto" {
-            if atty::is(atty::Stream::Stdout) || self.is_present("pretty") {
+            if cli::is_tty_stdout() || self.is_present("pretty") {
                 ColorChoice::Auto
             } else {
                 ColorChoice::Never
@@ -990,7 +984,7 @@ impl ArgMatches {
         if self.is_present("no-heading") || self.is_present("vimgrep") {
             false
         } else {
-            atty::is(atty::Stream::Stdout)
+            cli::is_tty_stdout()
             || self.is_present("heading")
             || self.is_present("pretty")
         }
@@ -1042,7 +1036,7 @@ impl ArgMatches {
         // generally want to show line numbers by default when printing to a
         // tty for human consumption, except for one interesting case: when
         // we're only searching stdin. This makes pipelines work as expected.
-        (atty::is(atty::Stream::Stdout) && !self.is_only_stdin(paths))
+        (cli::is_tty_stdout() && !self.is_only_stdin(paths))
         || self.is_present("line-number")
         || self.is_present("column")
         || self.is_present("pretty")
@@ -1177,8 +1171,7 @@ impl ArgMatches {
         let file_is_stdin = self.values_of_os("file")
             .map_or(false, |mut files| files.any(|f| f == "-"));
         let search_cwd =
-            atty::is(atty::Stream::Stdin)
-            || !stdin_is_readable()
+            !cli::is_readable_stdin()
             || (self.is_present("file") && file_is_stdin)
             || self.is_present("files")
             || self.is_present("type-list");
@@ -1637,26 +1630,4 @@ where G: Fn(&fs::Metadata) -> io::Result<SystemTime>
     } else {
         t1.cmp(&t2)
     }
-}
-
-/// Returns true if and only if stdin is deemed searchable.
-#[cfg(unix)]
-fn stdin_is_readable() -> bool {
-    use std::os::unix::fs::FileTypeExt;
-
-    let ft = match Handle::stdin().and_then(|h| h.as_file().metadata()) {
-        Err(_) => return false,
-        Ok(md) => md.file_type(),
-    };
-    ft.is_file() || ft.is_fifo()
-}
-
-/// Returns true if and only if stdin is deemed searchable.
-#[cfg(windows)]
-fn stdin_is_readable() -> bool {
-    use winapi_util as winutil;
-
-    winutil::file::typ(winutil::HandleRef::stdin())
-        .map(|t| t.is_disk() || t.is_pipe())
-        .unwrap_or(false)
 }

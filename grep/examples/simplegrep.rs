@@ -1,4 +1,3 @@
-extern crate atty;
 extern crate grep;
 extern crate termcolor;
 extern crate walkdir;
@@ -10,10 +9,11 @@ use std::path::Path;
 use std::process;
 use std::result;
 
+use grep::cli;
 use grep::printer::{ColorSpecs, StandardBuilder};
 use grep::regex::RegexMatcher;
 use grep::searcher::{BinaryDetection, SearcherBuilder};
-use termcolor::{ColorChoice, StandardStream};
+use termcolor::ColorChoice;
 use walkdir::WalkDir;
 
 macro_rules! fail {
@@ -55,10 +55,11 @@ fn search(pattern: &str, paths: &[OsString]) -> Result<()> {
     let matcher = RegexMatcher::new_line_matcher(&pattern)?;
     let mut searcher = SearcherBuilder::new()
         .binary_detection(BinaryDetection::quit(b'\x00'))
+        .line_number(false)
         .build();
     let mut printer = StandardBuilder::new()
         .color_specs(colors())
-        .build(StandardStream::stdout(color_choice()));
+        .build(cli::stdout(color_choice()));
 
     for path in paths {
         for result in WalkDir::new(path) {
@@ -90,7 +91,7 @@ fn search(pattern: &str, paths: &[OsString]) -> Result<()> {
 }
 
 fn color_choice() -> ColorChoice {
-    if atty::is(atty::Stream::Stdout) {
+    if cli::is_tty_stdout() {
         ColorChoice::Auto
     } else {
         ColorChoice::Never
